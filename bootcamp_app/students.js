@@ -9,16 +9,24 @@ const pool = new Pool ({
 });
 //connect to nootcampx database in user ouyuritsu
 
-const cohort = process.argv[2];
-const limit = process.argv[3];
+// When passing parameters to your queries(from process.argv), you will want to avoid string concatenating parameters into the query text directly. This can (and often does) lead to sql injection vulnerabilities -- need to escape these values
 
-pool.query(`
+const queryString = `
 SELECT students.id as student_id, students.name as name, cohorts.name as cohort
 FROM students
 JOIN cohorts ON cohorts.id = cohort_id
-WHERE cohorts.name LIKE '%${cohort}%' 
-LIMIT ${limit || 5};
-`)
+WHERE cohorts.name LIKE $1
+LIMIT $2;
+`
+//Always use parameterized queries when you have data that comes from an untrusted source
+// Each $s in our query is a placeholder that represents where a value should go but can't because it's coming from somewhere else, so it might be malicious.
+const cohortName = process.argv[2];
+const limit = process.argv[3] || 5;
+// Store all potentially malicious values in an array.
+const values = [`%${cohortName}%`, limit];
+
+pool.query(queryString, values)
+// PostgreSQL receives these two pieces of information separately. It knows that the first part is a safe query that it can run and that the second part is data that may be malicious. It will use the values as data within the query but it will not run the values as part of the query. This protects us from SQL injection.
 .then(res => {
   res.rows.forEach (user => {
     console.log(`${user.name} has an id of ${user.student_id} and was in the ${user.cohort} cohort`);
